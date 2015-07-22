@@ -128,36 +128,83 @@ class Variable < Struct.new(:name)
     true
   end
 
-  # ここでハッシュから値を取得したら,
-  # それ以降変数を扱うことはない。
+  # 環境から値を取得する。
   def reduce(environment)
     environment[name]
   end
 end
 
 
-class Machine < Struct.new(:expression, :environment)	# 式と環境が必要
+class DoNothing
+  def to_s
+    'do-nothing'
+  end
+
+  def inspect
+    "<<#{self}>>"
+  end
+
+  def ==(other_statement)
+    other_statement.instance_of?(DoNothing)
+  end
+
+  def reducible?
+    false
+  end
+end
+
+class Assign <Struct.new(:name, :expression)
+  def to_s
+    "#{name} = #{expression}"
+  end
+
+  def inspect
+    "<<#{self}>>"
+  end
+
+  def reducible?
+    true
+  end
+
+  def reduce(environment)
+    if expression.reducible?
+      [Assign.new(name, expression.reduce(environment)), environment]
+    else
+      # hash.merge(other_hash) 2 つのハッシュを統合する。
+      # 既存のキーがあれば other_hash の値が使われる。
+      # (実行の最後も)環境が更新される。
+      [DoNothing.new, environment.merge({name => expression})]
+    end
+  end
+end
+
+class Machine < Struct.new(:statement, :environment)	# 文と環境が必要
+#class Machine < Struct.new(:expression, :environment)	# 式と環境が必要
 
   def step
-    self.expression = expression.reduce(environment)
+
+
+    # 現在は Assign のみハッシュを返すが、全てハッシュを
+    # 返すように変更するのが正しい ?
+    if statement.instance_of?(Assign)
+      # 環境が更新される。
+      self.statement, self.environment = statement.reduce(environment)
+    else
+      self.statement = statement.reduce(environment)
+    end
   end
 
   def run
-    while expression.reducible?
-      puts expression
+    while statement.reducible?
+      puts "#{statement}, #{environment}"
       step
     end
-    puts expression
+    puts "#{statement}, #{environment}"
   end
 end
 
 
-
-
-# irb 上で定義した rr で /tmp/__currrent.rb を require する。
-# main.run で実行する。
-def main
-
+def m1
   Machine.new(
     Add.new(Multiply.new(
              Number.new(1),
@@ -166,9 +213,11 @@ def main
               Number.new(3),
               Number.new(4))
            ),
-    {}
+    {} # 空の環境
   )
+end
 
+def m2
   Machine.new(
     LessThan.new(Number.new(5),
                  Add.new(
@@ -177,11 +226,26 @@ def main
     {}
   )
 
+end
+
+def m3
   Machine.new(
     Add.new(Variable.new(:x),
             Variable.new(:y)),
     {x: Number.new(3),
      y: Number.new(4)}
+  )
+end
+
+
+# irb 上で定義した rr で /tmp/__currrent.rb を require する。
+# main.run で実行する。
+def main
+  Machine.new(
+    Assign.new(:x,
+               Add.new(Variable.new(:x),
+                       Number.new(1))),
+    {x: Number.new(2)}
   )
 end
 
