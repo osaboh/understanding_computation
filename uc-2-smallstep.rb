@@ -13,7 +13,7 @@ class Number < Struct.new(:value)
   end
 
   def inspect
-    "<<#{self}>>"
+    " <<#{self}>>"
   end
 
   def reducible?
@@ -242,11 +242,37 @@ class Sequence < Struct.new(:first, :second)
 end
 
 
+class While < Struct.new(:condition, :body)
+  def to_s
+    "while (#{condition}) { #{body} }"
+  end
+  def inspect
+    "<<#{self}>>"
+  end
+
+  def reducible?
+    true
+  end
+
+  def reduce(environment)
+    [If.new(condition,
+            Sequence.new(body, self),
+            DoNothing.new),
+     environment]
+  end
+end
+
+
+
+
 class Machine < Struct.new(:statement, :environment)	# 文と環境が必要
 
   def step
     # statement の場合のみ、環境が更新される。
-    if statement.instance_of?(Assign) || statement.instance_of?(If) || statement.instance_of?(Sequence)
+    if statement.instance_of?(Assign)	|| \
+       statement.instance_of?(If)	|| \
+       statement.instance_of?(Sequence) || \
+       statement.instance_of?(While)
 
       self.statement, self.environment = statement.reduce(environment)
     else
@@ -274,7 +300,7 @@ def m1
               Number.new(4))
            ),
     {} # 空の環境
-  )
+  ).run
 end
 
 def m2
@@ -284,7 +310,7 @@ def m2
                    Number.new(2),
                    Number.new(2))),
     {}
-  )
+  ).run
 
 end
 
@@ -294,7 +320,7 @@ def m3
             Variable.new(:y)),
     {x: Number.new(3),
      y: Number.new(4)}
-  )
+  ).run
 end
 
 def m4
@@ -303,7 +329,7 @@ def m4
                Add.new(Variable.new(:x),
                        Number.new(1))),
     {x: Number.new(2)}
-  )
+  ).run
 end
 
 
@@ -313,7 +339,7 @@ def m5
            Assign.new(:y, Number.new(1)),
            Assign.new(:y, Number.new(2))),
     {x: Boolean.new(true)}
-  )
+  ).run
 end
 
 
@@ -323,15 +349,43 @@ def m6
            Assign.new(:y, Number.new(1)),
            DoNothing.new),
     {x: Boolean.new(true)}
-  )
+  ).run
 end
 
 
-def main
+def m7
   Machine.new(
     Sequence.new(Assign.new(:x, Add.new(Number.new(1), Number.new(1))),
                  Assign.new(:y, Add.new(Variable.new(:x), Number.new(3)))),
     {}
-  )
+  ).run
 end
+
+def m8
+  main
+end
+
+def all_run
+  p m1
+  p m2
+  p m3
+  p m4
+  p m5
+  p m6
+  p m7
+  p m8
+end
+
+def main
+  Machine.new(
+    While.new(LessThan.new(Variable.new(:x),
+                           Number.new(5)),
+              Assign.new(:x,
+                         Multiply.new(Variable.new(:x),
+                                      Number.new(3)))),
+    {x: Number.new(1)}
+  ).run
+end
+
+main
 
