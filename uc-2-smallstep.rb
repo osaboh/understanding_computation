@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby2.1
 # coding: utf-8
 
+# irb 上で定義した rr で /tmp/__currrent.rb を require する。
+# main.run で実行する。
+
 require "pp"
 
 class Number < Struct.new(:value)
@@ -212,12 +215,39 @@ class If <Struct.new(:condition, :consequence, :alternative)
   end
 end
 
+# シーケンス文
+class Sequence < Struct.new(:first, :second)
+  def to_s
+    "#{first}; #{second}"
+  end
+
+  def inspect
+    "<<#{self}>>"
+  end
+
+  def reducible?
+    true
+  end
+
+  def reduce(environment)
+    case first
+    when DoNothing.new
+      [second, environment]
+    else
+      # first は簡約できる(文)と仮定する。
+      reduced_first, reduced_environment = first.reduce(environment)
+      [Sequence.new(reduced_first, second), reduced_environment]
+    end
+  end
+end
+
 
 class Machine < Struct.new(:statement, :environment)	# 文と環境が必要
 
   def step
-    if statement.instance_of?(Assign) || statement.instance_of?(If)
-      # statement の場合のみ、環境が更新される。
+    # statement の場合のみ、環境が更新される。
+    if statement.instance_of?(Assign) || statement.instance_of?(If) || statement.instance_of?(Sequence)
+
       self.statement, self.environment = statement.reduce(environment)
     else
       self.statement = statement.reduce(environment)
@@ -287,16 +317,21 @@ def m5
 end
 
 
-# irb 上で定義した rr で /tmp/__currrent.rb を require する。
-# main.run で実行する。
-def main
-
+def m6
   Machine.new(
     If.new(Variable.new(:x),
            Assign.new(:y, Number.new(1)),
-           DoNothing.new
-          ),
+           DoNothing.new),
     {x: Boolean.new(true)}
+  )
+end
+
+
+def main
+  Machine.new(
+    Sequence.new(Assign.new(:x, Add.new(Number.new(1), Number.new(1))),
+                 Assign.new(:y, Add.new(Variable.new(:x), Number.new(3)))),
+    {}
   )
 end
 
