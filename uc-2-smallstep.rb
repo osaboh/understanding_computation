@@ -1,19 +1,29 @@
 #!/usr/bin/env ruby2.1
 # coding: utf-8
 
-# irb 上で定義した rr で /tmp/__currrent.rb を require する。
-# main.run で実行する。
+# O'Reilly アンダースタンディング コンピューテーション、
+# 2 章の操作的意味論(スモールステップ意味論)の仮想機械
+# 2015/07/22 19:58:33 osaboh
+#
+# .irbrc で以下を定義しておくと便利。
+# def rr
+#   require "this_code.rb"
+# end
 
 require "pp"
 
-class Number < Struct.new(:value)
+# 共通 inspect メソッド
+module Com_inspect
+  def inspect
+    " <<#{self}>> "
+  end
+end
 
+# 数値
+class Number < Struct.new(:value)
+  include Com_inspect
   def to_s
     value.to_s
-  end
-
-  def inspect
-    " <<#{self}>>"
   end
 
   def reducible?
@@ -21,14 +31,23 @@ class Number < Struct.new(:value)
   end
 end
 
-class Add < Struct.new(:left, :right)
-
+# bool
+class Boolean < Struct.new(:value)
+  include Com_inspect
   def to_s
-    "#{left} + #{right}"
+    value.to_s
   end
 
-  def inspect
-    "<<#{self}>>"
+  def reducible?
+    false
+  end
+end
+
+# 加算 "+"
+class Add < Struct.new(:left, :right)
+  include Com_inspect
+  def to_s
+    "#{left} + #{right}"
   end
 
   def reducible?
@@ -46,15 +65,11 @@ class Add < Struct.new(:left, :right)
   end
 end
 
-
+# 積算 "*"
 class Multiply < Struct.new(:left, :right)
-
+  include Com_inspect
   def to_s
     "#{left} * #{right}"
-  end
-
-  def inspect
-    "<<#{self}>>"
   end
 
   def reducible?
@@ -73,29 +88,11 @@ class Multiply < Struct.new(:left, :right)
 end
 
 
-# bool
-class Boolean < Struct.new(:value)
-  def to_s
-    value.to_s
-  end
-
-  def inspect
-    "<<#{self}>>"
-  end
-
-  def reducible?
-    false
-  end
-end
-
-# <(小なり)
+# 比較 "<"
 class LessThan < Struct.new(:left, :right)
+  include Com_inspect
   def to_s
     "#{left} < #{right}"
-  end
-
-  def inspect
-    "<<#{self}>>"
   end
 
   def reducible?
@@ -109,11 +106,6 @@ class LessThan < Struct.new(:left, :right)
       LessThan.new(left, right.reduce(environment))
     else
       Boolean.new(left.value < right.value)
-      # if left.value < right.value
-      #   true
-      # else
-      #   false
-      # end
     end
   end
 end
@@ -121,11 +113,9 @@ end
 
 # 変数
 class Variable < Struct.new(:name)
+  include Com_inspect
   def to_s
     name.to_s
-  end
-  def inspect
-    "<<#{self}>>"
   end
   def reducible?
     true
@@ -140,15 +130,12 @@ end
 
 # なにもしない文
 class DoNothing
+  include Com_inspect
   def to_s
     'do-nothing'
   end
 
-  def inspect
-    "<<#{self}>>"
-  end
-
-  # Struct を継承してないので演算子を定義する。
+  # DoNothing は Struct を継承してないので演算子を定義する。
   def ==(other_statement)
     other_statement.instance_of?(DoNothing)
   end
@@ -158,14 +145,12 @@ class DoNothing
   end
 end
 
+## これ以降は文(statement) ##
 # 代入文
 class Assign <Struct.new(:name, :expression)
+  include Com_inspect
   def to_s
     "#{name} = #{expression}"
-  end
-
-  def inspect
-    "<<#{self}>>"
   end
 
   def reducible?
@@ -178,8 +163,6 @@ class Assign <Struct.new(:name, :expression)
     else
       # hash.merge(other_hash) 2 つのハッシュを統合する。
       # 既存のキーがあれば other_hash の値が使われる。
-
-      # (実行の最後も)環境が更新される。
       [DoNothing.new, environment.merge({name => expression})]
     end
   end
@@ -188,12 +171,9 @@ end
 
 # if 文
 class If <Struct.new(:condition, :consequence, :alternative)
+  include Com_inspect
   def to_s
     "if (#{condition}) then { #{consequence} }  else { #{alternative} }"
-  end
-
-  def inspect
-    "<<#{self}>>"
   end
 
   def reducible?
@@ -217,12 +197,9 @@ end
 
 # シーケンス文
 class Sequence < Struct.new(:first, :second)
+  include Com_inspect
   def to_s
     "#{first}; #{second}"
-  end
-
-  def inspect
-    "<<#{self}>>"
   end
 
   def reducible?
@@ -241,13 +218,11 @@ class Sequence < Struct.new(:first, :second)
   end
 end
 
-
+# while 文
 class While < Struct.new(:condition, :body)
+  include Com_inspect
   def to_s
     "while (#{condition}) { #{body} }"
-  end
-  def inspect
-    "<<#{self}>>"
   end
 
   def reducible?
@@ -256,26 +231,25 @@ class While < Struct.new(:condition, :body)
 
   def reduce(environment)
     [If.new(condition,
-            Sequence.new(body, self),
-            DoNothing.new),
+            Sequence.new(body, self), DoNothing.new),
      environment]
   end
 end
 
+# 簡約器
+class Machine < Struct.new(:statement, :environment)
 
-
-
-class Machine < Struct.new(:statement, :environment)	# 文と環境が必要
+  def reduced_with_env?(term)
+    term.instance_of?(Assign)	|| term.instance_of?(If) || \
+    term.instance_of?(Sequence) || term.instance_of?(While)
+  end
 
   def step
-    # statement の場合のみ、環境が更新される。
-    if statement.instance_of?(Assign)	|| \
-       statement.instance_of?(If)	|| \
-       statement.instance_of?(Sequence) || \
-       statement.instance_of?(While)
-
+    if reduced_with_env?(statement)
+      # statement の場合は環境を更新する。
       self.statement, self.environment = statement.reduce(environment)
     else
+      # その他は簡約のみ行う。
       self.statement = statement.reduce(environment)
     end
   end
@@ -336,8 +310,10 @@ end
 def m5
   Machine.new(
     If.new(Variable.new(:x),
-           Assign.new(:y, Number.new(1)),
-           Assign.new(:y, Number.new(2))),
+           Assign.new(:y,
+                      Number.new(1)),
+           Assign.new(:y,
+                      Number.new(2))),
     {x: Boolean.new(true)}
   ).run
 end
@@ -355,17 +331,43 @@ end
 
 def m7
   Machine.new(
-    Sequence.new(Assign.new(:x, Add.new(Number.new(1), Number.new(1))),
-                 Assign.new(:y, Add.new(Variable.new(:x), Number.new(3)))),
+    Sequence.new(Assign.new(:x,
+                            Add.new(Number.new(1),
+                                    Number.new(1))),
+                 Assign.new(:y,
+                            Add.new(Variable.new(:x),
+                                    Number.new(3)))),
     {}
   ).run
 end
 
 def m8
-  main
+  Machine.new(
+    While.new(LessThan.new(Variable.new(:x),
+                           Number.new(5)),
+              Assign.new(:x,
+                         Multiply.new(Variable.new(:x),
+                                      Number.new(3)))),
+    {x: Number.new(1)}
+  ).run
 end
 
-def all_run
+
+# これはエラー
+# y = true + 1, {:x=> <<true>>}
+# qr_26934PKK.rb:44:in `reduce': undefined method `+' for true:TrueClass (NoMethodError)
+# def m9
+#   Machine.new(
+#     Sequence.new(Assign.new(:x,
+#                             Boolean.new(true)),
+#                  Assign.new(:y,
+#                             Add.new(Variable.new(:x),
+#                                     Number.new(1)))),
+#     {}
+#   ).run
+# end
+
+def test_run
   p m1
   p m2
   p m3
@@ -377,15 +379,9 @@ def all_run
 end
 
 def main
-  Machine.new(
-    While.new(LessThan.new(Variable.new(:x),
-                           Number.new(5)),
-              Assign.new(:x,
-                         Multiply.new(Variable.new(:x),
-                                      Number.new(3)))),
-    {x: Number.new(1)}
-  ).run
+  test_run
 end
 
 main
+
 
