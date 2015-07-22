@@ -135,6 +135,7 @@ class Variable < Struct.new(:name)
 end
 
 
+# なにもしない文
 class DoNothing
   def to_s
     'do-nothing'
@@ -144,6 +145,7 @@ class DoNothing
     "<<#{self}>>"
   end
 
+  # Struct を継承してないので演算子を定義する。
   def ==(other_statement)
     other_statement.instance_of?(DoNothing)
   end
@@ -153,6 +155,7 @@ class DoNothing
   end
 end
 
+# 代入文
 class Assign <Struct.new(:name, :expression)
   def to_s
     "#{name} = #{expression}"
@@ -172,22 +175,49 @@ class Assign <Struct.new(:name, :expression)
     else
       # hash.merge(other_hash) 2 つのハッシュを統合する。
       # 既存のキーがあれば other_hash の値が使われる。
+
       # (実行の最後も)環境が更新される。
       [DoNothing.new, environment.merge({name => expression})]
     end
   end
 end
 
+
+# if 文
+class If <Struct.new(:condition, :consequence, :alternative)
+  def to_s
+    "if (#{condition}) then { #{consequence} }  else { #{alternative} }"
+  end
+
+  def inspect
+    "<<#{self}>>"
+  end
+
+  def reducible?
+    true
+  end
+
+  def reduce(environment)
+    # reduce 可能なのは数値とbool、例外的に DoNothing。
+    if condition.reducible?
+      [If.new(condition.reduce(environment), consequence, alternative), environment]
+    else
+      case condition
+      when Boolean.new(true)
+        [consequence, environment]
+      when Boolean.new(false)
+        [alternative, environment]
+      end
+    end
+  end
+end
+
+
 class Machine < Struct.new(:statement, :environment)	# 文と環境が必要
-#class Machine < Struct.new(:expression, :environment)	# 式と環境が必要
 
   def step
-
-
-    # 現在は Assign のみハッシュを返すが、全てハッシュを
-    # 返すように変更するのが正しい ?
-    if statement.instance_of?(Assign)
-      # 環境が更新される。
+    if statement.instance_of?(Assign) || statement.instance_of?(If)
+      # statement の場合のみ、環境が更新される。
       self.statement, self.environment = statement.reduce(environment)
     else
       self.statement = statement.reduce(environment)
@@ -237,15 +267,36 @@ def m3
   )
 end
 
-
-# irb 上で定義した rr で /tmp/__currrent.rb を require する。
-# main.run で実行する。
-def main
+def m4
   Machine.new(
     Assign.new(:x,
                Add.new(Variable.new(:x),
                        Number.new(1))),
     {x: Number.new(2)}
+  )
+end
+
+
+def m5
+  Machine.new(
+    If.new(Variable.new(:x),
+           Assign.new(:y, Number.new(1)),
+           Assign.new(:y, Number.new(2))),
+    {x: Boolean.new(true)}
+  )
+end
+
+
+# irb 上で定義した rr で /tmp/__currrent.rb を require する。
+# main.run で実行する。
+def main
+
+  Machine.new(
+    If.new(Variable.new(:x),
+           Assign.new(:y, Number.new(1)),
+           DoNothing.new
+          ),
+    {x: Boolean.new(true)}
   )
 end
 
