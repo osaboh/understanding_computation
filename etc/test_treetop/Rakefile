@@ -1,0 +1,14 @@
+require 'rake/clean'
+
+parser = "calc.rb"
+grammar = "calc.tt"
+
+desc "Genarate parser code from grammar"
+task :default => parser
+
+file parser => [ grammar ] do
+  sh "tt -o #{parser} #{grammar}"
+end
+
+CLEAN << parser
+

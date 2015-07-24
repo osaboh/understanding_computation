@@ -1,0 +1,54 @@
+# coding: utf-8
+# PEG Parser Treetop のテスト
+# use treetop-mode
+#   https://gist.github.com/gnurag/5732203
+# http://route477.net/d/?date=20090318
+# https://gist.github.com/mqu/5286033
+grammar Calc
+
+  rule add_sub
+
+    number "+" add_sub {
+      def value
+        number.value + add_sub.value
+      end
+    }
+    /
+    number "-" add_sub {
+      def value
+        number.value - add_sub.value
+      end
+    }
+    /
+    number
+  end
+
+
+  # rule mul_div
+  #   number "*" mul_div {
+  #     def value
+  #       number.value * mul_div.value
+  #     end
+  #   }
+  #   /
+  #   number "/" mul_div {
+  #     def value
+  #       number.value / mul_div.value
+  #     end
+  #   }
+  #   /
+  #   number
+  # end
+
+  rule number
+    [0-9]+ {
+      def value
+        text_value.to_i
+      end
+    }
+  end
+end
+
+
+
+
